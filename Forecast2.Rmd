@@ -1,0 +1,1087 @@
+---
+title: " Forecasting Assignment 2"
+author: "Priya Ningappa Madabal (s3959738)"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+
+# **1. Objective of the Assignment**
+
+* In this analysis, we have two tasks. 
+
+## **Task 1**
+
+The objective of task 1 is to identify the most suitable model for predicting solar radiation levels in a specific area, looking two years ahead. This prediction relies on the input of monthly precipitation data.
+
+## **Task 2**
+
+In Task 2, we will examine whether there is a correlation between the quarterly Residential Property Price Index (PPI) in Melbourne and the quarterly population change in Victoria from the previous quarter. We aim to determine if there is a meaningful relationship between these two series or if any observed correlation is merely coincidental.
+
+# **2. Loading necessary packages for the assignment**
+
+```{r}
+# Loading necessary packages for the assignment requirement. 
+
+library(tseries)
+library(dLagM)
+library(tidyr)
+library(dplyr)
+library(car)
+library(forecast)
+library(lmtest)
+library(psd)
+library(TSA)
+library(knitr)
+library(kableExtra)
+library(readr)
+library(seasonal)
+library(x12)
+
+```
+
+
+
+# **3. Task 1**
+
+## **3.1. Introduction**
+
+The dataset includes information about the average monthly horizontal solar radiation and the corresponding monthly precipitation levels recorded at identical locations. The data spans from January 1960 to December 2014.
+
+## **3.2. Read/Import Data**
+
+```{r }
+
+getwd()
+
+#Task 1
+data1 <- read_csv("data1.csv")
+
+head(data1)
+
+```
+
+## **3.3. Data Processing**
+
+This code section begins by extracting the 'solar' and 'ppt' data from the dataset, converting them into vectors for analysis. Subsequently, time series objects (solar.ts and ppt.ts) were created using the ts function. The time series were defined to start from January 1960 and end in December 2014, with a frequency of 12, representing monthly data.
+
+To process and visualize the data, the following R code was employed:
+
+```{r}
+solar <- as.vector(data1$solar)
+ppt <- as.vector(data1$ppt)
+
+solar.ts <- ts(solar, start = c(1960,1), end = c(2014,12), frequency = 12)
+ppt.ts <- ts(ppt, start = c(1960,1), end = c(2014,12), frequency = 12)
+
+```
+
+
+## **3.4. Addressing Non-Stationarity in the Series**
+
+Non-stationarity in a time series refers to the presence of trends, seasonality, or other patterns that make the statistical properties of the series change over time. 
+
+Addressing non-stationarity is crucial for accurate forecasting, as many time series models assume stationarity for their underlying assumptions.
+
+This code snippet generates a plot illustrating the monthly average solar radiation levels over the given time period. The y-axis is labeled as "Monthly Average Solar Radiations," and the x-axis is labeled as "YEAR." The title "Solar Radiations" is added to the plot.
+
+### **3.4.1. Solar Radiation** 
+
+```{r fig.align="center", echo = FALSE}
+
+#Non stationary check for Solar series 
+
+plot(solar.ts, ylab="Monthly Average Solar Radiations", xlab="YEAR", main="Solar Radiations")
+
+```
+
+<br>
+<center>**Figure 1: Solar Radiation**</center>
+<br>
+
+* The solar radiation series doesn't exhibit any noticeable trend but does display clear seasonality patterns. There are no evident points of intervention or abrupt changes. The series does show signs of moving averages. Furthermore, variations in the variance of the series can be observed.
+
+### **3.4.2. Precipitation**
+
+```{r fig.align="center", echo = FALSE}
+
+#Plotting  precipitation series and check
+plot(ppt.ts, ylab="Monthly precipitation series measured", xlab="YEAR", main="Precipitation Series")
+
+```
+<br>
+<center>**Figure 2: Precipitation**</center>
+<br>
+
+* The precipitation series doesn't display any conspicuous trend; however, it does exhibit distinct seasonality patterns. There are no apparent intervention points or abrupt shifts observed in the data. The series does show indications of moving averages. Additionally, fluctuations in the variance of the series can be identified.
+
+## **3.5. Auto Correlation (ACF) and PACF**
+
+To analyze the ACF and PACF of the solar radiation and Precipitation time series, the following R code was executed:
+
+```{r fig.align="center", echo = FALSE}
+
+par(mfrow = c(2,2))
+acf(solar.ts, main="ACF of Horizontal Solar Radiation")
+acf(ppt.ts, main="ACF of Precipitation")
+pacf(solar.ts, main="PACF of Horizontal Solar Radiation")
+pacf(ppt.ts, main="PACF of Precipitation")
+
+```
+<br>
+<center>**Figure 3: ACF and PACF of the series**</center>
+<br>
+
+* The ACF plot of the **Solar Radiation** series indicates a recurring seasonal pattern, while the PACF plot reveals the presence of notable lags.
+
+* In the **Precipitation series**, the ACF plot demonstrates a repeating seasonal pattern, and the PACF plot also exhibits significant lags.
+
+
+## **3.6. Augmented Dickey-Fuller (ADF) test**
+
+The Augmented Dickey-Fuller (ADF) test is a statistical method commonly used in time series analysis to determine whether a given time series data is stationary or non-stationary. 
+
+In this report, we apply the ADF test to the series to investigate its stationarity characteristics.
+
+The hypotheses for the ADF test are as follows:
+
+  Null Hypothesis (H0): The series is non-stationary.
+  Alternative Hypothesis (HA): The series is stationary.
+  
+### **3.6.1. Solar series**
+
+```{r}
+#ADF test for Solar Series
+adf.test(solar.ts)
+
+```
+* The outcome of the Augmented Dickey-Fuller (ADF) Test for the solar series indicates stationarity. This conclusion is drawn from obtaining a p-value(0.01) that is lower than the commonly used significance level of 5%. As a result, we can reject the null hypothesis, supporting the assertion that the solar series is indeed stationary.
+
+### **3.6.2. Precipitation series**
+
+```{r}
+
+#ADF test for PPT series
+adf.test(ppt.ts)
+
+```
+* The outcome of the Augmented Dickey-Fuller (ADF) Test for the Precipitation series indicates stationarity. This conclusion is drawn from obtaining a p-value(0.01) that is lower than the commonly used significance level of 5%. As a result, we can reject the null hypothesis, supporting the assertion that the solar series is indeed stationary.
+
+## **3.7. Decomposition**
+
+* Decomposition enables the analysis of the distinct impacts of current components and previous effects within the data. To perform decomposition, we will employ the X12-ARIMA method, chosen for its effectiveness in assessing STL (Seasonal and Trend decomposition using Loess) decomposition.
+
+* The decompose function performs decomposition using the X12-ARIMA method. It takes a time series data 'x' as input and produces three types of visual outputs:
+
+* Decomposed Series Plot: This plot presents the original time series along with its decomposed components, including seasonal, trend, and irregular components. It provides insights into how each component contributes to the overall pattern.
+
+* SI Ratio Plot: This plot showcases the Seasonal-to-Irregular (SI) ratio, shedding light on the proportion of the seasonal and irregular components in the data.
+
+* STL Plot: This plot utilizes the STL decomposition method to visualize the seasonal, trend, and residual components of the time series in a more refined manner.
+
+The code for this decomposition function is as follows:
+
+```{r fig.align="center", echo = FALSE}
+
+#Decomposition function giving output decomposed series, SI ratio plot and STL plot.
+
+decompose <- function(x){
+  DECOM = x12(x)
+  plot(DECOM, sa=TRUE , trend=TRUE , forecast = TRUE)
+  
+  plotSeasFac(DECOM)
+
+  stldec=stl(x, t.window=15, s.window="periodic", robust=TRUE)
+  plot(stldec)
+}
+
+#decomposition
+decompose(solar.ts)
+
+```
+<br>
+<center>**Figure 4: Decompositions**</center>
+<br>
+* It's apparent that the seasonally adjusted series diverges from the original series in terms of pattern. This discrepancy suggests the influence of seasonal effects on the series. Interestingly, the trend component seems to closely mirror the original series, implying that the trend might not significantly impact the data.
+
+* Furthermore, the inclusion of a forecast offers valuable insights into potential future values.
+
+* Analyzing the SI Ratio plot, we notice that the seasonal factors tend to cluster around the mean for most months. This observation indicates a consistent presence of seasonality.
+
+* In the first graph of the STL decomposition, we encounter the original series, with recurring seasonal patterns remaining consistent, which signifies the existence of seasonality. The trend graph doesn't exhibit any substantial upward or downward trends, supporting the conclusion that a significant trend isn't present in the data.
+
+## **3.8. Distributed Lag Model**
+
+* To determine the most suitable Distributed Lag Model for our data, we will assess and compare the models based on their AIC (Akaike Information Criterion) and MASE (Mean Absolute Scaled Error) scores. The models we intend to fit include:
+
+  -> Finite Distributed-Lag Model
+  -> Polynomial Distributed Lags Model
+  -> Koyck Distributed Lag Model
+  -> Autoregressive Distributed Lag Model
+
+* We will utilize these evaluation metrics to identify the model that best captures the characteristics of our data and provides the most accurate forecasting results among these different Distributed Lag Model options.
+
+### **3.8.1. Finite Distributed-Lag Model**
+
+The Finite Distributed-Lag Model examines the lagged effects of precipitation on solar radiation. The key component we are investigating is:
+
+Dependent Variable: Solar Radiation
+Independent Variable: Precipitation
+Lagged Effects: The model considers the lagged effects of precipitation on solar radiation up to a specified lag order.
+
+```{r}
+
+# Determining the optimal "q" value based on AIC and BIC for fitting the Finite Distributed-Lag Model
+
+for(i in 1:10){
+  model1 = dlm( x = as.vector(ppt.ts) , y = as.vector(solar.ts), q = i )
+  cat("q = ", i, "AIC = ", AIC(model1$model), "BIC = ", BIC(model1$model),"\n")
+}
+
+```
+
+* The lowest AIC and BIC values (AIC =  4602.658 BIC =  4660.858) are observed when using a q-value of 10. Therefore, for the Finite Distributed-Lag Model, we will employ this specific value of q as it results in the best model fit for our data.
+
+```{r}
+
+model1<- dlm(x = as.vector(ppt.ts) , y = as.vector(solar.ts), q = 10)
+summary(model1)
+
+```
+
+
+```{r fig.align="center", echo = FALSE}
+
+checkresiduals(model1$model)
+
+```
+<br>
+<center>**Figure 5: Residuals - Finite Distributed-Lag Model**</center>
+<br>
+
+* The summary analysis indicates the significance of at least one lag. The adjusted R-squared value is notably low, suggesting that the model's explanatory power is limited. The Breusch-Godfrey test underscores serial correlation, with a value below 5%, implying the presence of such correlation. Additionally, the ACF plot highlights the high significance of residuals, which in turn violates the general assumptions of the model.
+
+```{r}
+
+#Assessing multicollinearity
+
+vif(model1$model)
+
+```
+
+* All the calculated VIF values are below 10, indicating the absence of significant multicollinearity among the predictor variables in the model.
+
+### **3.8.2. Polynomial Distributed Lag Model**
+
+In this section, we are fitting a Polynomial Distributed Lag Model using the polyDlm function. The model incorporates a second-degree polynomial with "q" value set to 2, and "k" value also set to 2. The parameter show.beta = TRUE indicates that the beta coefficients are to be displayed.
+
+```{r}
+
+model2 = polyDlm(x = as.vector(ppt.ts) , y = as.vector(solar.ts) , q = 2 , k = 2 , show.beta = TRUE)
+
+```
+
+```{r}
+
+summary(model2)
+
+```
+
+```{r fig.align="center", echo = FALSE}
+
+checkresiduals(model2$model)
+
+```
+
+<br>
+<center>**Figure 6: Residuals - Polynomial Distributed Lag Model**</center>
+<br>
+
+* Lagged Significance: At least one lag is found to be statistically significant in the model.
+
+Adjusted R-squared: The adjusted R-squared value is notably low, suggesting limited explanatory power of the model in explaining the variation in the dependent variable.
+
+Serial Correlation: The Breusch-Godfrey test reveals a p-value below 5%, indicating the presence of serial correlation in the model.
+
+Residuals: Observations from the ACF (Autocorrelation Function) plot highlight the high significance of residuals, suggesting a potential violation of general model assumptions.
+
+
+```{r}
+
+vif(model2$model)
+
+```
+
+* All the calculated values are above the threshold of 10, indicating the presence of multicollinearity among the variables.
+
+### **3.8.3. Koyck Distributed Lag Model**
+
+The Koyck Distributed Lag Model examines the lagged effects of precipitation on solar radiation. The key components of the model include:
+
+Dependent Variable: Solar Radiation
+Independent Variable: Precipitation
+Lagged Effects: The model considers the lagged effects of precipitation on solar radiation, allowing us to understand how past precipitation levels influence current solar radiation.
+
+```{r}
+
+model3 = koyckDlm(x = as.vector(ppt.ts) , y = as.vector(solar.ts))
+summary(model3,diagnostics=TRUE)
+
+```
+
+```{r fig.align="center", echo = FALSE}
+
+checkresiduals(model3$model)
+
+```
+<br>
+<center>**Figure 7: Residuals - Koyck Distributed Lag Model**</center>
+<br>
+
+* Coefficients: All of the lag coefficients are statistically significant, indicating a strong relationship between past precipitation levels and current solar radiation.
+
+* Adjusted R-squared: The adjusted R-squared value shows a satisfactory level of explanatory power in the model, suggesting that the model explains a significant portion of the variability in solar radiation.
+
+* Serial Correlation: The Breusch-Godfrey test demonstrates a p-value below 5%, indicating the presence of serial correlation. This suggests that there may be autocorrelation in the residuals.
+
+* Residuals: Observations from the ACF (Autocorrelation Function) plot suggest that residuals exhibit high significance, potentially indicating a violation of general model assumptions.
+
+We will assess the presence of multicollinearity: 
+
+```{r}
+
+vif(model3$model)
+
+```
+
+* The obtained VIF values are all below 10, confirming the absence of significant multicollinearity among the predictor variables in the Koyck Distributed Lag Model.
+
+### **3.8.4. Autorregressive Distributed Lag Model**
+
+The Autoregressive Distributed Lag Model explores the lagged effects of precipitation on solar radiation. The essential components are as follows:
+
+Dependent Variable: Solar Radiation
+Independent Variable: Precipitation
+Lagged Effects: The model considers the autoregressive (AR) and moving average (MA) orders, denoted by "p" and "q," respectively.
+
+
+```{r}
+
+#Checking p and q vales on basis fo AIC and BIC 
+for (i in 1:10){
+  for(j in 1:10){
+    model4 = ardlDlm(x = as.vector(ppt.ts) , y = as.vector(solar.ts), p = i , q = j )
+    cat("p = ", i, "q = ", j, "AIC = ", AIC(model4$model), "BIC = ", BIC(model4$model),"\n")
+  }
+}
+
+```
+
+* We decided to opt for "p=1" and "q=5" because these specific values yielded the lowest AIC and BIC scores when applied to our model. This choice was made because it strikes a balance between achieving a good fit to the data while keeping the model's complexity in check. In essence, it represents a well-justified selection for our ARDL model.
+
+```{r}
+
+model4 = ardlDlm(x = as.vector(ppt.ts) , y = as.vector(solar.ts), p = 9 , q = 7 )
+summary(model4)
+
+```
+
+
+
+```{r fig.align="center", echo = FALSE}
+
+checkresiduals(model4$model)
+
+```
+
+<br>
+<center>**Figure 8: Residuals - Autorregressive Distributed Lag Model**</center>
+<br>
+
+The summary analysis of the model provides additional insights:
+
+* Lagged Significance: The summary indicates that nearly all of the lags in the model are statistically significant. This suggests that past values of the variables have a significant impact on the current value of the dependent variable.
+
+* Adjusted R-squared: The adjusted R-squared value in the summary is notably high, indicating strong explanatory power within the model. This implies that the model effectively explains the variation in the dependent variable.
+
+* Serial Correlation: The Breusch-Godfrey test results indicate a p-value below the 5% threshold, which signifies the presence of serial correlation in the model. This implies that there is a systematic pattern in the residuals that is not accounted for by the model.
+
+* Residuals: The analysis of the ACF (Autocorrelation Function) plot reveals that the residuals do not exhibit significant autocorrelation. This suggests that the model adequately captures the temporal dependencies in the data. Consequently, the histogram of residuals appears to be well-distributed and normalized.
+
+We will assess the presence of multicollinearity:
+
+```{r}
+
+vif(model4$model)
+
+```
+
+* In our analysis, we've observed that some of the values are less than 10, while others exceed 10. This suggests the presence of multicollinearity within the series.
+
+
+## **3.9. Comparision of DLM models**
+
+In this section, we provide a comparative analysis of various Dynamic Linear Models (DLM) based on their Mean Absolute Scaled Error (MASE) values. The MASE is a critical performance metric, where lower values indicate superior forecast accuracy.
+
+```{r}
+
+mas =MASE(model1, model2, model3, model4)
+mas
+
+```
+
+
+## **3.10. Dynamic Lag Models**
+
+In this report, we present an overview of Dynamic Lag models, which have been developed using various components such as lagged variables (Y lag), step functions, intervention points, trend, and seasonality. The selection of the best model is based on the criteria of minimizing the AIC and achieving high accuracy as measured by MASE values.
+
+
+```{r}
+
+#Considerations for Dynlm models
+Y.t=solar.ts
+X.t=ppt.ts
+
+```
+
+```{r}
+#Model 1
+dynlm1 =dynlm(Y.t~ L(Y.t , k = 1 )+ trend(Y.t)+ season(Y.t))
+summary(dynlm1)
+
+```
+
+
+
+```{r fig.align="center", echo = FALSE}
+
+checkresiduals(dynlm1)
+
+```
+
+<br>
+<center>**Figure 9: Residuals - Dynamic Lag Model 1**</center>
+<br>
+
+
+```{r}
+
+dynlm2=dynlm(Y.t~ L(Y.t , k = 2)+X.t+ trend(Y.t)+ season(Y.t))
+summary(dynlm2)
+
+```
+
+
+```{r fig.align="center", echo = FALSE}
+
+checkresiduals(dynlm2)
+
+```
+
+<br>
+<center>**Figure 10: Residuals - Dynamic Lag Model 2**</center>
+<br>
+
+
+```{r}
+
+dynlm3 =dynlm(Y.t~ L(Y.t , k = 1 )+X.t+ season(Y.t))
+summary(dynlm3)
+
+```
+
+
+
+```{r fig.align="center", echo = FALSE}
+
+checkresiduals(dynlm3)
+
+```
+
+<br>
+<center>**Figure 11: Residuals - Dynamic Lag Model 3**</center>
+<br>
+
+
+```{r}
+
+dynlm4=dynlm(Y.t~ L(Y.t , k = 1 )+X.t+trend(Y.t))
+summary(dynlm4)
+
+```
+
+
+```{r fig.align="center", echo = FALSE}
+
+checkresiduals(dynlm4)
+
+```
+
+<br>
+<center>**Figure 12: Residuals - Dynamic Lag Model 4**</center>
+<br>
+
+
+```{r}
+
+dynlm5 =dynlm(Y.t~ L(Y.t , k = 1 )+L(Y.t , k = 2) +X.t +season(Y.t))
+summary(dynlm5)
+
+```
+
+
+```{r fig.align="center", echo = FALSE}
+
+checkresiduals(dynlm5)
+
+```
+
+<br>
+<center>**Figure 13: Residuals - Dynamic Lag Model 5**</center>
+<br>
+
+
+```{r}
+
+dynlm6 =dynlm(Y.t~ L(Y.t , k = 1 )+ L(Y.t , k = 2 )+L(Y.t , k = 3 )+X.t +season(Y.t))
+summary(dynlm6)
+
+```
+
+```{r fig.align="center", echo = FALSE}
+
+checkresiduals(dynlm6)
+
+```
+
+<br>
+<center>**Figure 14: Residuals - Dynamic Lag Model 6**</center>
+<br>
+
+
+## **3.11. Comparision of Dynamic lag models**
+
+A comparative analysis of different Dynamic Lag models has been conducted. The comparison is based on two key evaluation criteria: the AIC and the MASE value. These criteria are crucial for selecting the best-fitting model for forecasting tasks.
+
+```{r}
+
+aic =AIC(dynlm1, dynlm2, dynlm3, dynlm4, dynlm5,dynlm6)
+cbind(Model=c("Dynlm1","Dynlm2","Dynlm3","Dynlm4","Dynlm5","Dynlm6"),
+      MASE=c(accuracy(dynlm1)[6],accuracy(dynlm2)[6],accuracy(dynlm3)[6],accuracy(dynlm4)[6],
+             accuracy(dynlm5)[6],accuracy(dynlm6)[6]),aic)
+
+```
+
+* Based on the obtained values, it is evident that Dynlm6 exhibits the lowest AIC (2888.991) and MASE (0.3520468) values. Therefore, dynlm6 is selected as the preferred choice for forecasting.
+
+
+## **3.12. Exponential Smoothing Method**
+
+In our time series analysis, it is evident that there is no discernible trend, but there is a clear seasonal effect present. Given this characteristic, the Holt-Winter's method is considered the most suitable approach to address and model the seasonal effects.
+
+The models created using the Holt-Winter's method are as follows:
+
+-> Seasonality = Additive, Damped = False
+-> Seasonality = Additive, Damped = True
+-> Seasonality = Multiplicative, Damped = False
+-> Seasonality = Multiplicative, Damped = True
+-> Seasonality = Multiplicative, Damped = False, Exponential = True
+
+These models are designed to capture and incorporate the seasonal patterns observed in the data. The selection of the appropriate model will depend on the specific characteristics and requirements of the time series.
+
+In below section, we have implemented the Holt-Winter forecasting model with the following specifications:
+
+Model Type: Holt's Winter
+Seasonality: Additive
+Forecast Horizon: 5 times the frequency of the time series (h = 5 * frequency(Solar))
+
+
+```{r}
+
+#Holt’s-Winter for Model 1
+
+hw1 <- hw(solar.ts,seasonal="additive", h=5*frequency(solar.ts))
+summary(hw1)
+
+```
+
+```{r fig.align="center", echo = FALSE}
+
+checkresiduals(hw1)
+
+```
+
+<br>
+<center>**Figure 15: Residuals - Holt-Winter's Additive Method**</center>
+<br>
+
+In this section, we have implemented the Holt-Winter forecasting model with the following specifications:
+
+Model Type: Holt's Winter
+Seasonality: Multiplicative
+Forecast Horizon: 5 times the frequency of the time series (h = 5 * frequency(Solar))
+
+
+```{r}
+
+#Holt’s-Winter for Model 2
+hw2 <- hw(solar.ts,seasonal="multiplicative", h=5*frequency(solar.ts))
+summary(hw2)
+
+```
+
+
+
+
+```{r fig.align="center", echo = FALSE}
+
+checkresiduals(hw2)
+
+```
+
+<br>
+<center>**Figure 16: Residuals - Holt-Winter's Multiplicative Method**</center>
+<br>
+
+In this section, we have implemented the Holt-Winter forecasting model with the following specifications:
+
+Model Type: Holt's Winter
+Seasonality: Additive
+Damped: True
+Forecast Horizon: 5 times the frequency of the time series (h = 5 * frequency(Solar))
+
+```{r}
+
+#Holt’s-Winter for Model 3
+hw3 <- hw(solar.ts,seasonal="additive",damped = TRUE, h=5*frequency(solar.ts))
+summary(hw3)
+
+```
+
+
+
+```{r fig.align="center", echo = FALSE}
+
+checkresiduals(hw3)
+
+```
+<br>
+<center>**Figure 17: Residuals - Damped Holt-Winter's Additive Method**</center>
+<br>
+
+In this section, we have implemented the Holt-Winter forecasting model with the following specifications:
+
+Model Type: Holt's Winter
+Seasonality: Multiplicative
+Damped: True
+Forecast Horizon: 5 times the frequency of the time series (h = 5 * frequency(Solar))
+
+
+```{r}
+
+#Holt’s-Winter model 4
+hw4 <- hw(solar.ts,seasonal="multiplicative",damped = TRUE, h=5*frequency(solar.ts))
+summary(hw4)
+
+```
+
+
+
+
+```{r fig.align="center", echo = FALSE}
+
+checkresiduals(hw4)
+
+```
+<br>
+<center>**Figure 18: Residuals - Damped Holt-Winter's Multiplicative Method**</center>
+<br>
+
+In this section, we have implemented the Holt-Winter forecasting model with the following specifications:
+
+Model Type: Holt's Winter
+Seasonality: Multiplicative
+Exponential: True
+Forecast Horizon: 5 times the frequency of the time series (h = 5 * frequency(Solar))
+
+
+```{r}
+
+#Holt’s-Winter for Model 5
+
+hw5 <- hw(solar.ts,seasonal="multiplicative",exponential = TRUE, h=5*frequency(solar.ts))
+
+summary(hw5)
+
+```
+
+
+
+
+```{r fig.align="center", echo = FALSE}
+
+checkresiduals(hw5)
+
+```
+<br>
+<center>**Figure 19: Residuals - Holt-Winter's Multiplicative Method with Exponential Tred**</center>
+<br>
+
+Summary table that displays the MASE values for different Holt-Winter models. The table displays the models ("HW1" through "HW5") along with their respective MASE values, which represent the accuracy of each model's forecasts. Lower MASE values indicate better forecasting accuracy, so we can compare these values to determine which Holt-Winter model performs best for your forecasting task.
+
+```{r}
+
+cbind(Model=c("HW1","HW2","HW3","HW4","HW5"),
+      MASE=c(accuracy(hw1)[6],accuracy(hw2)[6],accuracy(hw3)[6],
+             accuracy(hw4)[6],accuracy(hw5)[6]))
+
+```
+
+Based on the comparative analysis of the Holt-Winter models, the following observations can be made:
+
+* The Root Mean Square Error (RMSE) is the lowest for HW4 and the highest for HW1.
+* The lowest values for both the AIC and Bayesian Information Criterion (BIC) are observed in HW3.
+* The Mean Absolute Percentage Error is the lowest for HW4.
+* The Mean Absolute Scaled Error (MASE) is the least in HW4.
+
+Considering these findings, it is evident that HW4 stands out as the best-fitting model among the Holt-Winter variants. This model demonstrates superior performance in terms of forecasting accuracy and information criteria, making it the preferred choice for your forecasting task.
+
+## **3.13. State-space model**
+
+The state-space model is a versatile approach that considers the error (E), trend (T), and seasonality (S) components of a time series. To determine the best-fitting state-space model, you can utilize the following code:
+
+```{r}
+
+ssm1 = ets(solar.ts,model ="ZZZ")
+ssm1$method
+
+```
+
+The result indicates that the best-fitting model for the series is "ETS(A,Ad,A)," which implies that it includes additive error, additive damped trend, and additive seasonality.
+
+Let's provide a summary of the "ETS(A,Ad,A)" model:
+
+Root Mean Square Error (RMSE): 2.324
+Akaike Information Criterion (AIC): 5428.422
+Bayesian Information Criterion (BIC): 5509.282
+Mean Absolute Scaled Error (MASE): 0.246
+
+These statistics provide valuable insights into the accuracy and information criteria of the "ETS(A,Ad,A)" model, making it a suitable choice for forecasting the series.
+
+
+```{r}
+
+summary(ssm1)   
+
+```
+
+
+## **3.14. Two-Year Forecasting**
+
+To select the best model for making solar radiation forecasts two years in advance, we've compared the performance of three different models:
+
+* The Holt-Winters' multiplicative method, which has the lowest Mean Absolute Scaled Error (MASE) and is particularly effective at capturing the patterns of autocorrelation and seasonality in the data.
+
+* The Holt-Winters' multiplicative method with a multiplicative trend, which has the second-lowest MASE and also performs well in capturing autocorrelation and seasonality.
+
+* The ETS(A,Ad,A) model, which was recommended by an automated algorithm and has the lowest MASE among all state-space models. However, it doesn't excel at capturing autocorrelation in the data.
+
+Below figure displays the fitted values and forecasts for a two-year period, helping us evaluate the performance of these models.
+
+```{r fig.align="center", echo = FALSE, fig.width=15, fig.height=8,  units='cm'}
+
+fit1 <- hw(solar.ts, seasonal = "multiplicative", h = 2*frequency(solar.ts))
+fit2 <- hw(solar.ts, seasonal = "multiplicative", exponential = T, h = 2*frequency(solar.ts))
+fit3 <- ets(solar.ts, model="AAA", damped = T)
+frc_fit3 <- forecast(fit3)
+plot(frc_fit3, fcol = "white", main = "Solar radiation series with two years ahead forecasts", ylab = "Radiation", ylim = c(-10,55))
+lines(fitted(fit1), col = "lightgreen")
+lines(fit1$mean, col = "lightgreen", lwd = 2)
+lines(fitted(fit2), col = "coral")
+lines(fit2$mean, col = "coral", lwd = 2)
+lines(fitted(fit3), col = "skyblue")
+lines(frc_fit3$mean, col = "skyblue", lwd = 2)
+legend("bottomleft", lty = 1, col = c("black", "lightgreen", "coral", "skyblue"), c("Data", "Holt-Winters' Multiplicative", "Holt-Winters' Multiplicative Exponential", "ETS(A,Ad,A)"))
+
+```
+
+<br>
+<center>**Figure 20: Two-Year Ahead Forecast of Solar Radiation Series**</center>
+<br>
+
+* When comparing the fitted values to the original data, we notice that all the models generally exhibit similarities, but the state-space model stands out as the one deviating the most from the actual data. Notably, around the years 1966 and 1987, the Holt-Winters' multiplicative method appears to closely approximate the original data.
+
+* However, the forecasts generated by the three models diverge significantly. The state-space model suggests the highest peaks in its forecasts, indicating the most optimistic outlook for solar radiation. In contrast, the Holt-Winters' multiplicative method forecasts a decrease in solar radiation over the next two years, while the Holt-Winters' multiplicative method with a multiplicative trend predicts a relatively stable amount of solar radiation in the first year, followed by a slight decrease in the second year.
+
+* Taking into account the residual analysis and the model's low Mean Absolute Scaled Error (MASE) value, we have decided to use the Holt-Winters' multiplicative model for generating two-year-ahead forecasts of solar radiation. The final forecasts can be seen below: 
+
+
+```{r fig.align="center", echo = FALSE, fig.width=15, fig.height=8,  units='cm'}
+
+plot(fit1, fcol = "white", main = "Solar radiation series with two years ahead forecasts", ylab = "Radiation")
+lines(fitted(fit1), col = "lightgreen")
+lines(fit1$mean, col = "lightgreen", lwd = 2)
+legend("topleft", lty = 1, col = c("black", "lightgreen"), c("Data", "Forecasts"))
+
+```
+
+<br>
+<center>**Figure 21: Two-Year Ahead Forecast of Solar Radiation Series**</center>
+<br>
+
+The forecasted solar radiation values for two years in advance, along with their associated 95% confidence intervals, are as follows:
+
+
+```{r}
+
+frc <- fit1$mean
+ub <- fit1$upper[,2]
+lb <- fit1$lower[,2]
+forecasts <- ts.intersect(ts(lb, start = c(2015,1), frequency = 12), ts(frc,start = c(2015,1), frequency = 12), ts(ub,start = c(2015,1), frequency = 12))
+colnames(forecasts) <- c("Lower bound", "Point forecast", "Upper bound")
+forecasts
+
+```
+
+It's evident that the 95% confidence intervals for the forecasts generated by the chosen approach are quite broad and do not offer reliable predictions.
+
+# **4. TASK 2**
+
+Objective: 
+
+In this analysis, we will examine whether there is a correlation between the quarterly Residential Property Price Index (PPI) in Melbourne and the quarterly population change in Victoria from the previous quarter. We aim to determine if there is a meaningful relationship between these two series or if any observed correlation is merely coincidental.
+
+## **4.1. Data Description**
+
+The dataset employed for this analysis comprises three key variables: the time period represented in quarters, the quarterly Residential Property Price Index (PPI) for Melbourne, and the population change from the previous quarter in Victoria. This dataset spans from September 2003 to December 2016.
+
+## **4.2. Import/Read the dataset**
+
+```{r}
+
+getwd()
+
+task2 <- read_csv("data2.csv")
+
+head(task2)
+
+```
+
+## **4.3. Data Preparation and Visualization**
+
+We prepared and visualized the dataset for analysis:
+
+* Converting to Time Series: The dataset, encompassing quarterly data from September 2003 to December 2016, was transformed into a time series, 'task,' with two primary variables: quarterly Residential Property Price Index (PPI) in Melbourne and population change over the previous quarter in Victoria.
+
+* Variable Extraction: Two time series variables were extracted from 'task': 'price' (PPI in Melbourne) and 'change' (population change in Victoria).
+
+* Intersecting Time Series: Both time series were intersected to create 'price.joint,' enabling us to examine their potential correlation.
+
+* Initial Visualization: A plot of 'price.joint' was generated, with the y-axis flipped for clarity, serving as a starting point for further analysis.
+
+This initial visualization allows for an overview of the relationship between Melbourne's PPI and Victoria's population change, setting the stage for deeper exploration and correlation analysis.
+
+
+```{r fig.align="center", echo = FALSE}
+
+#Converting dataset to timeseries 
+task=ts(task2,start = c(2003,3),frequency=4)
+price = task[,2]
+price
+change = task[,3]
+change
+
+#intersecting both time series
+price.joint=ts.intersect(price,change)
+
+price.joint
+
+plot(price.joint,yax.flip=T)
+
+```
+<br>
+<center>**Figure 22: Plot after intersecting both series**</center>
+<br>
+
+By examining the time series plot, it becomes evident that both series exhibit simultaneous upward trends. Additionally, the plot suggests that the population change series follows a seasonal pattern. In essence, the visualization hints at a potential correlation between these two series.
+
+To delve deeper into understanding the correlation structure between them, we present a plot depicting the sample cross-covariance function (CCF). In this plot, cross-correlations exceeding the magnitude of 1.96 divided by the square root of the sample size (represented by dashed lines) are considered statistically significant and different from zero.
+
+## **4.4. Analysis of correlation**
+
+
+```{r fig.align="center", echo = FALSE}
+
+ccf(as.vector(price.joint[,1]),as.vector(price.joint[,2]), ylab='CCF', main = "Sample CCF of PPI and population change")
+
+```
+
+<br>
+<center>**Figure 23: Sample CCF of PPI and population change**</center>
+<br>
+
+It appears that the high significance of the lags suggests the absence of significant evidence for the existence of a spurious correlation. Therefore, to make the series stationary and address any potential nonstationarity, it is advisable to apply differencing, a technique commonly used in time series analysis. This process, often referred to as "prewhitening," involves differencing the series to eliminate any underlying trends or seasonality, making it more suitable for further analysis.
+
+## **4.5. Analysis of nonstationarity**
+
+We will individually examine and elucidate the nonstationarity of each series.
+
+The following code snippet presents a time series plot of the quarterly Residential Property Price Index:
+
+```{r fig.align="center", echo = FALSE}
+
+plot(price.joint[,1], ylab = "Property Price Index", type="o", main = "Time series plot of Residential PPI from 2003 to 2016")
+
+```
+<br>
+<center>**Figure 24: Time series plot of Residential PPI from 2003 to 2016**</center>
+<br>
+
+The analysis of the Residential Property Price Index (PPI) series reveals the following characteristics:
+
+* Upward Trend: The series exhibits a consistent upward trend, indicating a gradual increase in property prices over time.
+
+* Lack of Seasonality: There are no apparent repeating patterns or seasonality in the data.
+
+* Stable Variance: The variance of the series remains relatively stable, suggesting consistent price fluctuations.
+
+* No Intervention: No significant external interventions or one-time events are observed in the series.
+* Autoregressive Behavior: Successive data points in the series appear to be dependent on their previous values, indicating autoregressive behavior.
+
+Furthermore, an Autocorrelation Function (ACF) plot will be generated to explore the temporal dependencies and autocorrelation within the series, providing additional insights for further analysis.
+
+```{r fig.align="center", echo = FALSE}
+
+acf(price.joint[,1], main = "Sample ACF of Residential PPI")
+
+```
+<br>
+<center>**Figure 25: Sample ACF of Residential PPI**</center>
+<br>
+
+```{r}
+
+adf.test(price.joint[,1])
+
+```
+The ACF plot displays a slowly decaying pattern, indicating nonstationarity in the Residential Property Price Index (PPI) series. This pattern suggests the presence of a trend while highlighting the absence of seasonality.
+
+Additionally, we conducted an Augmented Dickey-Fuller (ADF) unit root test to assess whether the series is difference stationary. The test yielded a p-value of 0.8458, which exceeds the standard significance level of 0.05. Consequently, we fail to find enough evidence to reject the null hypothesis, affirming that the Residential PPI series is indeed nonstationary.
+
+Shifting our focus to the quarterly population change in Victoria from 2003 to 2016, we will create a time series plot with quarter labels to investigate potential seasonal patterns and trends in this data.
+
+```{r fig.align="center", echo = FALSE}
+
+plot(change, ylab = "People", main = "Time series plot of population change from 2003 to 2016")
+
+
+```
+<br>
+<center>**Figure 26: Time series plot of population change from 2003 to 2016**</center>
+<br>
+
+The analysis of the population change data in figure reveals several key observations:
+
+* Upward Trend: There is a noticeable upward trend in population change over time, indicating a general increase in population.
+* Seasonality: The data exhibits a distinct seasonal pattern, with higher population growth during the first quarters of the year and lower growth in the second quarters.
+* Varied Variance: The presence of seasonality makes it challenging to identify changing variance, as the seasonal pattern dominates any potential variations.
+* Potential Intervention: There is a suggestion of a potential intervention or significant event around the year 2010, which could have influenced the population change.
+* Complex Behavior: Due to the strong seasonal pattern, understanding the underlying behavior of the series is complicated, as seasonality masks other potential trends or patterns.
+
+To further explore temporal dependencies and correlations within this series, we will analyze the sample Autocorrelation Function (ACF) in the subsequent steps.
+
+
+```{r fig.align="center", echo = FALSE}
+
+acf(change, main = "Sample ACF of population change")
+
+```
+
+<br>
+<center>**Figure 27: Sample ACF of population change**</center>
+<br>
+
+```{r}
+
+adf.test(change)
+
+```
+The ACF plot confirms the presence of a trend and seasonality in the population change series, aligning with previous observations from the time series plot. However, the Augmented Dickey-Fuller (ADF) test results with a p-value of 0.7344 indicate a lack of evidence to reject the null hypothesis of nonstationarity at the 5% significance level. Therefore, both the Residential Property Price Index (PPI) and population change series are considered nonstationary. Analyzing their true dependence becomes challenging due to strong autocorrelation in these nonstationary data sets.
+
+
+## **4.6. Prewhitening**
+
+To disentangle the relationship between the two series from their autocorrelation, we will employ the prewhitening approach. A crucial prerequisite for prewhitening is ensuring that both series are stationary. Based on our earlier analysis, we will perform both regular differencing and seasonal differencing on both series. The application of seasonal differencing to both series ensures that they have the same length and a consistent structure for further analysis. This stationary transformation will enable us to explore the relationship between the series more effectively.
+
+
+```{r fig.align="center", echo = FALSE}
+
+# Calculate me.dif
+me.dif <- ts.intersect(diff(diff(price, 4)), diff(diff(change, 4)), frequency = 4)
+
+# Perform prewhitening manually by differencing
+lag_order <- 1  # Adjust the lag order as needed
+prewhitened_series1 <- diff(me.dif[, 1], lag = lag_order)
+prewhitened_series2 <- diff(me.dif[, 2], lag = lag_order)
+
+# Plot the prewhitened series
+plot(prewhitened_series1, ylab = 'Value', main = 'Prewhitened Series 1')
+plot(prewhitened_series2, ylab = 'Value', main = 'Prewhitened Series 2')
+
+# Compute the CCF between the prewhitened series
+ccf_result_prewhitened <- ccf(
+  as.vector(prewhitened_series1),
+  as.vector(prewhitened_series2),
+  ylab = 'CCF',
+  main = 'Sample CCF after Prewhitening'
+)
+
+# Plot the CCF after prewhitening
+plot(ccf_result_prewhitened, ylab = 'CCF', main = 'Sample CCF after Prewhitening')
+
+```
+
+<br>
+<center>**Figure 28: Sample CFF prewhitened**</center>
+<br>
+
+The sample Cross-Correlation Function (CCF) plot following prewhitening in Figure 7 indicates that there is, in fact, no significant correlation observed between the Residential Property Price Index and population change in Victoria. This finding leads us to conclude that the strong cross-correlation pattern initially identified between the raw series was indeed spurious.
+
+Prewhitening, which involved differencing to make both series stationary and remove their autocorrelation, has clarified that there is no meaningful underlying relationship between these two variables. This underscores the importance of addressing nonstationarity and autocorrelation when analyzing time series data to ensure more accurate and reliable conclusions.
+
+# **5. Conclusion**
+
+## **5.1. Task 1**
+
+In our pursuit of predicting solar radiation amounts for the next two years, we explored three different modeling approaches: time series regression models, exponential smoothing, and state-space models. We evaluated these models based on residual analysis and the Mean Absolute Scaled Error (MASE) value. Our key findings from model fitting revealed the following:
+
+* Some of the time series regression models, certain exponential smoothing models, and the automatically suggested state-space model struggled to effectively capture the autocorrelation and seasonality patterns in the solar radiation data.
+
+* Across all models, there were issues with the assumption of normality in the residuals.
+
+* The most successful models in terms of capturing seasonality and serial correlation were the Holt-Winters’ multiplicative method and the Holt-Winters’ multiplicative method with a multiplicative trend. These models also yielded the lowest MASE values.
+
+Based on our comprehensive analysis, we selected the Holt-Winters’ multiplicative method for forecasting solar radiation. However, it's important to note that the point forecasts generated by this model have wide 95% confidence intervals, which makes them less reliable.
+
+
+## **5.2. Task 2**
+
+Our investigation into the relationship between the Residential Property Price Index (PPI) and population change series yielded the following conclusions:
+
+* Both series displayed simultaneous increasing trends.
+
+* Initial visual analysis suggested some level of correlation between the two series.
+
+* The Cross-Correlation Function (CCF) plot indicated a strong cross-correlation between the raw series.
+
+* To assess the genuine dependence between the two processes, we applied prewhitening techniques, which involve differencing to make both series stationary.
+
+* However, the sample CCF plot following prewhitening revealed that there was, in fact, no significant correlation between the Residential Property Price Index and population change in Victoria.
+
+In summary, the initial strong cross-correlation pattern discovered between the raw series was found to be spurious. This emphasizes the importance of addressing nonstationarity and autocorrelation in time series data analysis to draw accurate and meaningful conclusions.
